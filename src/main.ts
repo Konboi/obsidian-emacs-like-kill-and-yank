@@ -19,6 +19,16 @@ type EditorContext = {
 export default class EmacsLikeKillAndYankPlugin extends Plugin {
   private activeMark: ActiveMark | null = null;
   private syncingSelection = false;
+  private readonly markMotionKeys = new Set([
+    "ArrowLeft",
+    "ArrowRight",
+    "ArrowUp",
+    "ArrowDown",
+    "Home",
+    "End",
+    "PageUp",
+    "PageDown",
+  ]);
 
   async onload(): Promise<void> {
     this.registerEditorExtension([
@@ -61,6 +71,10 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
         },
       ]),
     ]);
+
+    this.registerDomEvent(document, "keydown", (event) => {
+      this.handleMarkMotionKeydown(event);
+    });
 
     this.addCommand({
       id: "kill-line",
@@ -160,6 +174,25 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
     }
   }
 
+  private handleMarkMotionKeydown(event: KeyboardEvent): void {
+    const activeMark = this.activeMark;
+    if (!activeMark) {
+      return;
+    }
+
+    if (!this.markMotionKeys.has(event.key)) {
+      return;
+    }
+
+    if (!(event.target instanceof Node) || !activeMark.view.dom.contains(event.target)) {
+      return;
+    }
+
+    window.setTimeout(() => {
+      this.syncMarkSelection(activeMark.view);
+    }, 0);
+  }
+
   private toggleMark(context: EditorContext): void {
     const editorView = this.getEditorView(context);
     if (!editorView) {
@@ -196,6 +229,25 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
     if (this.activeMark?.view === editorView) {
       this.activeMark = null;
     }
+  }
+
+  private syncMarkSelection(editorView: EditorView): void {
+    if (!this.activeMark || this.activeMark.view !== editorView) {
+      return;
+    }
+
+    const selection = editorView.state.selection.main;
+    const desiredAnchor = this.activeMark.anchor;
+
+    if (selection.anchor === desiredAnchor) {
+      return;
+    }
+
+    this.syncingSelection = true;
+    editorView.dispatch({
+      selection: EditorSelection.single(desiredAnchor, selection.head),
+    });
+    this.syncingSelection = false;
   }
 
   private killLine(editor: Editor): void {
