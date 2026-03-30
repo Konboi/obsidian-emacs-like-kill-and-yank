@@ -59,54 +59,42 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
         },
         {
           key: "ArrowLeft",
-          run: (view) => this.runMarkMotion(view, () =>
-            view.moveByChar(view.state.selection.main, false),
-          ),
+          run: () => false,
         },
         {
           key: "ArrowRight",
-          run: (view) => this.runMarkMotion(view, () =>
-            view.moveByChar(view.state.selection.main, true),
-          ),
+          run: () => false,
         },
         {
           key: "ArrowUp",
-          run: (view) => this.runMarkMotion(view, () =>
-            view.moveVertically(view.state.selection.main, false),
-          ),
+          run: () => false,
         },
         {
           key: "ArrowDown",
-          run: (view) => this.runMarkMotion(view, () =>
-            view.moveVertically(view.state.selection.main, true),
-          ),
+          run: () => false,
         },
         {
           key: "Home",
-          run: (view) => this.runMarkMotion(view, () =>
-            view.moveToLineBoundary(view.state.selection.main, false),
-          ),
+          run: () => false,
         },
         {
           key: "End",
-          run: (view) => this.runMarkMotion(view, () =>
-            view.moveToLineBoundary(view.state.selection.main, true),
-          ),
+          run: () => false,
         },
         {
           key: "PageUp",
-          run: (view) => this.runMarkMotion(view, () =>
-            view.moveVertically(view.state.selection.main, false, view.dom.clientHeight),
-          ),
+          run: () => false,
         },
         {
           key: "PageDown",
-          run: (view) => this.runMarkMotion(view, () =>
-            view.moveVertically(view.state.selection.main, true, view.dom.clientHeight),
-          ),
+          run: () => false,
         },
       ]),
     ]);
+
+    this.registerDomEvent(document, "keydown", (event) => {
+      this.handleMarkMotion(event);
+    });
 
     this.addCommand({
       id: "kill-line",
@@ -192,20 +180,52 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
     }
   }
 
-  private runMarkMotion(
-    editorView: EditorView,
-    move: () => { head: number },
-  ): boolean {
-    if (!this.activeMark || this.activeMark.view !== editorView) {
-      return false;
+  private handleMarkMotion(event: KeyboardEvent): void {
+    const activeMark = this.activeMark;
+    if (!activeMark) {
+      return;
     }
 
-    const next = move();
-    editorView.dispatch({
-      selection: EditorSelection.single(this.activeMark.anchor, next.head),
+    if (!(event.target instanceof Node) || !activeMark.view.dom.contains(event.target)) {
+      return;
+    }
+
+    const next = this.getNextSelectionHead(activeMark.view, event.key);
+    if (next === null) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    activeMark.view.dispatch({
+      selection: EditorSelection.single(activeMark.anchor, next),
       scrollIntoView: true,
     });
-    return true;
+  }
+
+  private getNextSelectionHead(editorView: EditorView, key: string): number | null {
+    const selection = editorView.state.selection.main;
+
+    switch (key) {
+      case "ArrowLeft":
+        return editorView.moveByChar(selection, false).head;
+      case "ArrowRight":
+        return editorView.moveByChar(selection, true).head;
+      case "ArrowUp":
+        return editorView.moveVertically(selection, false).head;
+      case "ArrowDown":
+        return editorView.moveVertically(selection, true).head;
+      case "Home":
+        return editorView.moveToLineBoundary(selection, false).head;
+      case "End":
+        return editorView.moveToLineBoundary(selection, true).head;
+      case "PageUp":
+        return editorView.moveVertically(selection, false, editorView.dom.clientHeight).head;
+      case "PageDown":
+        return editorView.moveVertically(selection, true, editorView.dom.clientHeight).head;
+      default:
+        return null;
+    }
   }
 
   private killLine(editor: Editor): void {
