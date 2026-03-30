@@ -1,0 +1,27 @@
+{
+  "name": "obsidian-emacs-like-kill-and-yank",
+  "version": "0.1.0",
+  "description": "Obsidian plugin that adds Emacs-like kill, yank, and visible mark selection.",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "version:update-versions-json": "node scripts/update-versions-json.mjs"
+  },
+  "keywords": [
+    "obsidian",
+    "plugin",
+    "emacs"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.17.30",
+    "esbuild": "^0.25.5",
+    "tslib": "^2.8.1",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "obsidian": "latest"
+  }
+}
