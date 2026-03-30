@@ -1,6 +1,6 @@
 {
   "name": "obsidian-emacs-like-kill-and-yank",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Obsidian plugin that adds Emacs-like kill, yank, and visible mark selection.",
   "main": "main.js",
   "type": "module",
