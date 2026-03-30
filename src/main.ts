@@ -47,6 +47,17 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
           },
         },
         {
+          key: "Ctrl-w",
+          run: (view) => {
+            if (view.composing) {
+              return false;
+            }
+
+            void this.killRegionInEditorView(view);
+            return true;
+          },
+        },
+        {
           key: "Ctrl-Space",
           run: (view) => {
             if (view.composing) {
@@ -129,6 +140,19 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
 
         this.clearMarkForView(view);
         void this.yankClipboard(editor);
+      },
+    });
+
+    this.addCommand({
+      id: "kill-region",
+      name: "Kill region",
+      hotkeys: [{ modifiers: ["Ctrl"], key: "w" }],
+      editorCallback: (editor, view) => {
+        if (!this.hasEditor(view) || this.isComposing(view)) {
+          return;
+        }
+
+        void this.killRegion(editor, view);
       },
     });
 
@@ -297,6 +321,44 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
     });
   }
 
+  private async killRegion(editor: Editor, context: EditorContext): Promise<void> {
+    const editorView = this.getEditorView(context);
+    if (!editorView) {
+      return;
+    }
+
+    await this.killRegionInEditorView(editorView, editor);
+  }
+
+  private async killRegionInEditorView(editorView: EditorView, editor?: Editor): Promise<void> {
+    const selection = this.getEffectiveSelection(editorView);
+    if (!selection || selection.empty) {
+      return;
+    }
+
+    const text = editorView.state.doc.sliceString(selection.from, selection.to);
+    await this.writeClipboard(text);
+
+    if (editor) {
+      const from = editor.offsetToPos(selection.from);
+      const to = editor.offsetToPos(selection.to);
+      editor.setSelection(from, to);
+      editor.replaceSelection("");
+    } else {
+      editorView.dispatch({
+        changes: {
+          from: selection.from,
+          to: selection.to,
+          insert: "",
+        },
+        selection: EditorSelection.cursor(selection.from),
+        scrollIntoView: true,
+      });
+    }
+
+    this.clearMarkForEditorView(editorView);
+  }
+
   private async yankClipboard(editor: Editor): Promise<void> {
     try {
       const text = await navigator.clipboard.readText();
@@ -362,6 +424,27 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
         selection: EditorSelection.single(cursorOffset, cursorOffset),
       });
     }
+  }
+
+  private getEffectiveSelection(editorView: EditorView): { from: number; to: number; empty: boolean } | null {
+    const selection = editorView.state.selection.main;
+    if (!selection.empty) {
+      return {
+        from: selection.from,
+        to: selection.to,
+        empty: false,
+      };
+    }
+
+    if (!this.activeMark || this.activeMark.view !== editorView || this.activeMark.anchor === selection.head) {
+      return null;
+    }
+
+    return {
+      from: Math.min(this.activeMark.anchor, selection.head),
+      to: Math.max(this.activeMark.anchor, selection.head),
+      empty: false,
+    };
   }
 
   private getEditorView(context: EditorContext): EditorView | null {
