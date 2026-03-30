@@ -4,3 +4,4 @@ versionFile = package.json,manifest.json
 changelog = false
 release = true
 postVersionCommand = npm run version:update-versions-json
+	vPrefix = true
