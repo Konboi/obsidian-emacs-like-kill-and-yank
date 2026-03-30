@@ -1,7 +1,7 @@
 import { Editor, Notice, Plugin } from "obsidian";
 import { keymap } from "@codemirror/view";
 import { EditorSelection } from "@codemirror/state";
-import { EditorView, ViewPlugin, ViewUpdate } from "@codemirror/view";
+import { EditorView } from "@codemirror/view";
 
 interface ActiveMark {
   anchor: number;
@@ -18,21 +18,9 @@ type EditorContext = {
 
 export default class EmacsLikeKillAndYankPlugin extends Plugin {
   private activeMark: ActiveMark | null = null;
-  private syncingSelection = false;
-  private readonly markMotionKeys = new Set([
-    "ArrowLeft",
-    "ArrowRight",
-    "ArrowUp",
-    "ArrowDown",
-    "Home",
-    "End",
-    "PageUp",
-    "PageDown",
-  ]);
 
   async onload(): Promise<void> {
     this.registerEditorExtension([
-      this.createMarkTrackingExtension(),
       keymap.of([
         {
           key: "Ctrl-k",
@@ -69,12 +57,56 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
             return true;
           },
         },
+        {
+          key: "ArrowLeft",
+          run: (view) => this.runMarkMotion(view, () =>
+            view.moveByChar(view.state.selection.main, false),
+          ),
+        },
+        {
+          key: "ArrowRight",
+          run: (view) => this.runMarkMotion(view, () =>
+            view.moveByChar(view.state.selection.main, true),
+          ),
+        },
+        {
+          key: "ArrowUp",
+          run: (view) => this.runMarkMotion(view, () =>
+            view.moveVertically(view.state.selection.main, false),
+          ),
+        },
+        {
+          key: "ArrowDown",
+          run: (view) => this.runMarkMotion(view, () =>
+            view.moveVertically(view.state.selection.main, true),
+          ),
+        },
+        {
+          key: "Home",
+          run: (view) => this.runMarkMotion(view, () =>
+            view.moveToLineBoundary(view.state.selection.main, false),
+          ),
+        },
+        {
+          key: "End",
+          run: (view) => this.runMarkMotion(view, () =>
+            view.moveToLineBoundary(view.state.selection.main, true),
+          ),
+        },
+        {
+          key: "PageUp",
+          run: (view) => this.runMarkMotion(view, () =>
+            view.moveVertically(view.state.selection.main, false, view.dom.clientHeight),
+          ),
+        },
+        {
+          key: "PageDown",
+          run: (view) => this.runMarkMotion(view, () =>
+            view.moveVertically(view.state.selection.main, true, view.dom.clientHeight),
+          ),
+        },
       ]),
     ]);
-
-    this.registerDomEvent(document, "keydown", (event) => {
-      this.handleMarkMotionKeydown(event);
-    });
 
     this.addCommand({
       id: "kill-line",
@@ -122,77 +154,6 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
     this.activeMark = null;
   }
 
-  private createMarkTrackingExtension() {
-    const plugin = this;
-
-    return ViewPlugin.fromClass(
-      class {
-        constructor(private readonly view: EditorView) {}
-
-        update(update: ViewUpdate): void {
-          plugin.handleViewUpdate(this.view, update);
-        }
-
-        destroy(): void {
-          plugin.handleViewDestroy(this.view);
-        }
-      },
-    );
-  }
-
-  private handleViewUpdate(view: EditorView, update: ViewUpdate): void {
-    if (!this.activeMark || this.activeMark.view !== view) {
-      return;
-    }
-
-    if (update.docChanged) {
-      this.activeMark.anchor = update.changes.mapPos(this.activeMark.anchor);
-    }
-
-    if (this.syncingSelection || (!update.selectionSet && !update.docChanged)) {
-      return;
-    }
-
-    const selection = view.state.selection.main;
-    const desiredAnchor = this.activeMark.anchor;
-    const desiredHead = selection.head;
-
-    if (selection.anchor === desiredAnchor) {
-      return;
-    }
-
-    this.syncingSelection = true;
-    view.dispatch({
-      selection: EditorSelection.single(desiredAnchor, desiredHead),
-    });
-    this.syncingSelection = false;
-  }
-
-  private handleViewDestroy(view: EditorView): void {
-    if (this.activeMark?.view === view) {
-      this.activeMark = null;
-    }
-  }
-
-  private handleMarkMotionKeydown(event: KeyboardEvent): void {
-    const activeMark = this.activeMark;
-    if (!activeMark) {
-      return;
-    }
-
-    if (!this.markMotionKeys.has(event.key)) {
-      return;
-    }
-
-    if (!(event.target instanceof Node) || !activeMark.view.dom.contains(event.target)) {
-      return;
-    }
-
-    window.setTimeout(() => {
-      this.syncMarkSelection(activeMark.view);
-    }, 0);
-  }
-
   private toggleMark(context: EditorContext): void {
     const editorView = this.getEditorView(context);
     if (!editorView) {
@@ -231,23 +192,20 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
     }
   }
 
-  private syncMarkSelection(editorView: EditorView): void {
+  private runMarkMotion(
+    editorView: EditorView,
+    move: () => { head: number },
+  ): boolean {
     if (!this.activeMark || this.activeMark.view !== editorView) {
-      return;
+      return false;
     }
 
-    const selection = editorView.state.selection.main;
-    const desiredAnchor = this.activeMark.anchor;
-
-    if (selection.anchor === desiredAnchor) {
-      return;
-    }
-
-    this.syncingSelection = true;
+    const next = move();
     editorView.dispatch({
-      selection: EditorSelection.single(desiredAnchor, selection.head),
+      selection: EditorSelection.single(this.activeMark.anchor, next.head),
+      scrollIntoView: true,
     });
-    this.syncingSelection = false;
+    return true;
   }
 
   private killLine(editor: Editor): void {
