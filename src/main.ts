@@ -58,6 +58,14 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
           },
         },
         {
+          key: "Escape",
+          run: (view) => this.cancelMarkFromEditorView(view),
+        },
+        {
+          key: "Ctrl-g",
+          run: (view) => this.cancelMarkFromEditorView(view),
+        },
+        {
           key: "ArrowLeft",
           run: () => false,
         },
@@ -136,6 +144,19 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
         this.toggleMark(view);
       },
     });
+
+    this.addCommand({
+      id: "keyboard-quit",
+      name: "Keyboard quit",
+      hotkeys: [{ modifiers: ["Ctrl"], key: "g" }],
+      editorCallback: (_editor, view) => {
+        if (!this.hasEditor(view)) {
+          return;
+        }
+
+        this.cancelMark(view);
+      },
+    });
   }
 
   onunload(): void {
@@ -174,10 +195,31 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
     }
   }
 
+  private cancelMark(context: EditorContext): void {
+    const editorView = this.getEditorView(context);
+    if (editorView) {
+      this.cancelMarkFromEditorView(editorView);
+    }
+  }
+
   private clearMarkForEditorView(editorView: EditorView): void {
     if (this.activeMark?.view === editorView) {
       this.activeMark = null;
     }
+  }
+
+  private cancelMarkFromEditorView(editorView: EditorView): boolean {
+    if (this.activeMark?.view !== editorView) {
+      return false;
+    }
+
+    const head = editorView.state.selection.main.head;
+    this.activeMark = null;
+    editorView.dispatch({
+      selection: EditorSelection.cursor(head),
+      scrollIntoView: true,
+    });
+    return true;
   }
 
   private handleMarkMotion(event: KeyboardEvent): void {
