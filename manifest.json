@@ -1,7 +1,7 @@
 {
   "id": "emacs-like-kill-and-yank",
   "name": "Emacs-like Kill And Yank",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "minAppVersion": "1.5.0",
   "description": "Adds Ctrl+K, Ctrl+Y, and a visible Ctrl+Space mark selection that works with other selection-based plugins.",
   "author": "Konboi",
