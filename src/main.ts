@@ -1,4 +1,5 @@
 import { Editor, Notice, Plugin } from "obsidian";
+import { keymap } from "@codemirror/view";
 import { EditorSelection } from "@codemirror/state";
 import { EditorView, ViewPlugin, ViewUpdate } from "@codemirror/view";
 
@@ -20,7 +21,46 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
   private syncingSelection = false;
 
   async onload(): Promise<void> {
-    this.registerEditorExtension(this.createMarkTrackingExtension());
+    this.registerEditorExtension([
+      this.createMarkTrackingExtension(),
+      keymap.of([
+        {
+          key: "Ctrl-k",
+          run: (view) => {
+            if (view.composing) {
+              return false;
+            }
+
+            this.clearMarkForEditorView(view);
+            this.killLineInEditorView(view);
+            return true;
+          },
+        },
+        {
+          key: "Ctrl-y",
+          run: (view) => {
+            if (view.composing) {
+              return false;
+            }
+
+            this.clearMarkForEditorView(view);
+            void this.yankToEditorView(view);
+            return true;
+          },
+        },
+        {
+          key: "Ctrl-Space",
+          run: (view) => {
+            if (view.composing) {
+              return false;
+            }
+
+            this.toggleMarkFromEditorView(view);
+            return true;
+          },
+        },
+      ]),
+    ]);
 
     this.addCommand({
       id: "kill-line",
@@ -32,15 +72,7 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
         }
 
         this.clearMarkForView(view);
-
-        const position = editor.getCursor();
-        const line = editor.getLine(position.line);
-        const retainedText = line.slice(0, position.ch);
-        const killedText = line.slice(position.ch);
-
-        void this.writeClipboard(killedText);
-        editor.setLine(position.line, retainedText);
-        editor.setCursor(position.line, position.ch);
+        this.killLine(editor);
       },
     });
 
@@ -160,10 +192,60 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
     }
   }
 
+  private clearMarkForEditorView(editorView: EditorView): void {
+    if (this.activeMark?.view === editorView) {
+      this.activeMark = null;
+    }
+  }
+
+  private killLine(editor: Editor): void {
+    const position = editor.getCursor();
+    const line = editor.getLine(position.line);
+    const retainedText = line.slice(0, position.ch);
+    const killedText = line.slice(position.ch);
+
+    void this.writeClipboard(killedText);
+    editor.setLine(position.line, retainedText);
+    editor.setCursor(position.line, position.ch);
+  }
+
+  private killLineInEditorView(editorView: EditorView): void {
+    const selection = editorView.state.selection.main;
+    const line = editorView.state.doc.lineAt(selection.head);
+    const killedText = editorView.state.doc.sliceString(selection.head, line.to);
+
+    void this.writeClipboard(killedText);
+    editorView.dispatch({
+      changes: {
+        from: selection.head,
+        to: line.to,
+        insert: "",
+      },
+      selection: EditorSelection.cursor(selection.head),
+    });
+  }
+
   private async yankClipboard(editor: Editor): Promise<void> {
     try {
       const text = await navigator.clipboard.readText();
       editor.replaceSelection(text);
+    } catch (error) {
+      this.showClipboardError("read", error);
+    }
+  }
+
+  private async yankToEditorView(editorView: EditorView): Promise<void> {
+    try {
+      const text = await navigator.clipboard.readText();
+      const selection = editorView.state.selection.main;
+      editorView.dispatch({
+        changes: {
+          from: selection.from,
+          to: selection.to,
+          insert: text,
+        },
+        selection: EditorSelection.cursor(selection.from + text.length),
+      });
     } catch (error) {
       this.showClipboardError("read", error);
     }
@@ -189,6 +271,25 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
 
   private hasEditor(context: EditorContext): context is EditorContext & { editor: Editor } {
     return context.editor !== undefined;
+  }
+
+  private toggleMarkFromEditorView(editorView: EditorView): void {
+    if (this.activeMark?.view === editorView) {
+      this.activeMark = null;
+      return;
+    }
+
+    const cursorOffset = editorView.state.selection.main.head;
+    this.activeMark = {
+      anchor: cursorOffset,
+      view: editorView,
+    };
+
+    if (!editorView.state.selection.main.empty) {
+      editorView.dispatch({
+        selection: EditorSelection.single(cursorOffset, cursorOffset),
+      });
+    }
   }
 
   private getEditorView(context: EditorContext): EditorView | null {
