@@ -58,6 +58,30 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
           },
         },
         {
+          key: "Ctrl-a",
+          run: () => false,
+        },
+        {
+          key: "Ctrl-e",
+          run: () => false,
+        },
+        {
+          key: "Ctrl-b",
+          run: () => false,
+        },
+        {
+          key: "Ctrl-f",
+          run: () => false,
+        },
+        {
+          key: "Ctrl-p",
+          run: () => false,
+        },
+        {
+          key: "Ctrl-n",
+          run: () => false,
+        },
+        {
           key: "Ctrl-Space",
           run: (view) => {
             if (view.composing) {
@@ -256,7 +280,7 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
       return;
     }
 
-    const next = this.getNextSelectionHead(activeMark.view, event.key);
+    const next = this.getNextSelectionHead(activeMark.view, event);
     if (next === null) {
       return;
     }
@@ -269,8 +293,9 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
     });
   }
 
-  private getNextSelectionHead(editorView: EditorView, key: string): number | null {
+  private getNextSelectionHead(editorView: EditorView, event: KeyboardEvent): number | null {
     const selection = editorView.state.selection.main;
+    const key = event.key;
 
     switch (key) {
       case "ArrowLeft":
@@ -289,6 +314,42 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
         return editorView.moveVertically(selection, false, editorView.dom.clientHeight).head;
       case "PageDown":
         return editorView.moveVertically(selection, true, editorView.dom.clientHeight).head;
+      case "a":
+      case "A":
+        if (event.ctrlKey) {
+          return editorView.moveToLineBoundary(selection, false).head;
+        }
+        return null;
+      case "e":
+      case "E":
+        if (event.ctrlKey) {
+          return editorView.moveToLineBoundary(selection, true).head;
+        }
+        return null;
+      case "b":
+      case "B":
+        if (event.ctrlKey) {
+          return editorView.moveByChar(selection, false).head;
+        }
+        return null;
+      case "f":
+      case "F":
+        if (event.ctrlKey) {
+          return editorView.moveByChar(selection, true).head;
+        }
+        return null;
+      case "p":
+      case "P":
+        if (event.ctrlKey) {
+          return editorView.moveVertically(selection, false).head;
+        }
+        return null;
+      case "n":
+      case "N":
+        if (event.ctrlKey) {
+          return editorView.moveVertically(selection, true).head;
+        }
+        return null;
       default:
         return null;
     }
