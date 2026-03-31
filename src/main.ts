@@ -58,6 +58,17 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
           },
         },
         {
+          key: "Alt-w",
+          run: (view) => {
+            if (view.composing) {
+              return false;
+            }
+
+            void this.copyRegionInEditorView(view);
+            return true;
+          },
+        },
+        {
           key: "Ctrl-a",
           run: () => false,
         },
@@ -177,6 +188,19 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
         }
 
         void this.killRegion(editor, view);
+      },
+    });
+
+    this.addCommand({
+      id: "copy-region-as-kill",
+      name: "Copy region as kill",
+      hotkeys: [{ modifiers: ["Alt"], key: "w" }],
+      editorCallback: (editor, view) => {
+        if (!this.hasEditor(view) || this.isComposing(view)) {
+          return;
+        }
+
+        void this.copyRegion(editor, view);
       },
     });
 
@@ -418,6 +442,25 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
     }
 
     this.clearMarkForEditorView(editorView);
+  }
+
+  private async copyRegion(editor: Editor, context: EditorContext): Promise<void> {
+    const editorView = this.getEditorView(context);
+    if (!editorView) {
+      return;
+    }
+
+    await this.copyRegionInEditorView(editorView, editor);
+  }
+
+  private async copyRegionInEditorView(editorView: EditorView, _editor?: Editor): Promise<void> {
+    const selection = this.getEffectiveSelection(editorView);
+    if (!selection || selection.empty) {
+      return;
+    }
+
+    const text = editorView.state.doc.sliceString(selection.from, selection.to);
+    await this.writeClipboard(text);
   }
 
   private async yankClipboard(editor: Editor): Promise<void> {
