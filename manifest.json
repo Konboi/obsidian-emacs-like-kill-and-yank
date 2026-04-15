@@ -3,7 +3,7 @@
   "name": "Emacs-like Kill And Yank",
   "version": "0.1.7",
   "minAppVersion": "1.5.0",
-  "description": "Adds Ctrl+K, Ctrl+Y, and a visible Ctrl+Space mark selection that works with other selection-based plugins.",
+  "description": "Adds Ctrl+K, Ctrl+Y, Ctrl+T split navigation, Ctrl+Shift+T reverse split navigation, and a visible Ctrl+Space mark selection that works with other selection-based plugins.",
   "author": "Konboi",
   "authorUrl": "https://github.com/Konboi",
   "isDesktopOnly": true
