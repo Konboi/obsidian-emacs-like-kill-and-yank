@@ -16,6 +16,11 @@ type EditorContext = {
   editor?: Editor;
 };
 
+interface VisibleRootLeaf {
+  leaf: WorkspaceLeaf;
+  rect: DOMRect;
+}
+
 export default class EmacsLikeKillAndYankPlugin extends Plugin {
   private activeMark: ActiveMark | null = null;
 
@@ -245,7 +250,7 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
       name: "Focus next split",
       hotkeys: [{ modifiers: ["Ctrl"], key: "t" }],
       checkCallback: (checking) => {
-        if (this.getVisibleRootLeaves().length <= 1) {
+        if (this.getOrderedVisibleRootLeaves().length <= 1) {
           return false;
         }
 
@@ -530,12 +535,12 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
   }
 
   private focusNextVisibleRootLeaf(): boolean {
-    const leaves = this.getVisibleRootLeaves();
+    const leaves = this.getOrderedVisibleRootLeaves();
     if (leaves.length <= 1) {
       return false;
     }
 
-    const activeLeaf = this.app.workspace.getMostRecentLeaf(this.app.workspace.rootSplit);
+    const activeLeaf = this.getActiveVisibleRootLeaf(leaves);
     const activeIndex = activeLeaf ? leaves.indexOf(activeLeaf) : -1;
     const nextLeaf = leaves[(activeIndex + 1) % leaves.length];
     if (!nextLeaf) {
@@ -548,34 +553,64 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
     return true;
   }
 
-  private getVisibleRootLeaves(): WorkspaceLeaf[] {
-    const leaves: WorkspaceLeaf[] = [];
+  private getOrderedVisibleRootLeaves(): WorkspaceLeaf[] {
+    const visibleLeaves: VisibleRootLeaf[] = [];
     this.app.workspace.iterateRootLeaves((leaf) => {
-      if (this.isVisibleLeaf(leaf)) {
-        leaves.push(leaf);
+      const rect = this.getVisibleLeafRect(leaf);
+      if (rect) {
+        visibleLeaves.push({ leaf, rect });
       }
     });
 
-    return leaves;
+    return visibleLeaves
+      .sort((a, b) => {
+        const leftDiff = a.rect.left - b.rect.left;
+        if (Math.abs(leftDiff) > 1) {
+          return leftDiff;
+        }
+
+        return a.rect.top - b.rect.top;
+      })
+      .map(({ leaf }) => leaf);
   }
 
-  private isVisibleLeaf(leaf: WorkspaceLeaf): boolean {
+  private getActiveVisibleRootLeaf(leaves: WorkspaceLeaf[]): WorkspaceLeaf | null {
+    const activeElement = document.activeElement;
+    if (activeElement) {
+      const focusedLeaf = leaves.find((leaf) => {
+        const leafEl = leaf.view.containerEl.closest(".workspace-leaf");
+        return leafEl?.contains(activeElement) ?? false;
+      });
+
+      if (focusedLeaf) {
+        return focusedLeaf;
+      }
+    }
+
+    return this.app.workspace.getMostRecentLeaf(this.app.workspace.rootSplit);
+  }
+
+  private getVisibleLeafRect(leaf: WorkspaceLeaf): DOMRect | null {
     const leafEl = leaf.view.containerEl.closest(".workspace-leaf");
     if (!(leafEl instanceof HTMLElement)) {
-      return false;
+      return null;
     }
 
     if (!this.app.workspace.containerEl.contains(leafEl)) {
-      return false;
+      return null;
     }
 
     const style = leafEl.ownerDocument.defaultView?.getComputedStyle(leafEl);
     if (style?.display === "none" || style?.visibility === "hidden") {
-      return false;
+      return null;
     }
 
     const rect = leafEl.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0;
+    if (rect.width <= 0 || rect.height <= 0) {
+      return null;
+    }
+
+    return rect;
   }
 
   private isComposing(context: EditorContext): boolean {
