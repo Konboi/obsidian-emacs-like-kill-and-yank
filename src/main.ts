@@ -1,4 +1,4 @@
-import { Editor, Notice, Plugin } from "obsidian";
+import { Editor, Notice, Plugin, WorkspaceLeaf } from "obsidian";
 import { keymap } from "@codemirror/view";
 import { EditorSelection } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
@@ -44,6 +44,16 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
             this.clearMarkForEditorView(view);
             void this.yankToEditorView(view);
             return true;
+          },
+        },
+        {
+          key: "Ctrl-t",
+          run: (view) => {
+            if (view.composing) {
+              return false;
+            }
+
+            return this.focusNextVisibleRootLeaf();
           },
         },
         {
@@ -227,6 +237,23 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
         }
 
         this.cancelMark(view);
+      },
+    });
+
+    this.addCommand({
+      id: "focus-next-split",
+      name: "Focus next split",
+      hotkeys: [{ modifiers: ["Ctrl"], key: "t" }],
+      checkCallback: (checking) => {
+        if (this.getVisibleRootLeaves().length <= 1) {
+          return false;
+        }
+
+        if (!checking) {
+          this.focusNextVisibleRootLeaf();
+        }
+
+        return true;
       },
     });
   }
@@ -500,6 +527,55 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
   private showClipboardError(action: "read" | "write", error: unknown): void {
     const message = error instanceof Error ? error.message : String(error);
     new Notice(`Clipboard ${action} failed: ${message}`);
+  }
+
+  private focusNextVisibleRootLeaf(): boolean {
+    const leaves = this.getVisibleRootLeaves();
+    if (leaves.length <= 1) {
+      return false;
+    }
+
+    const activeLeaf = this.app.workspace.getMostRecentLeaf(this.app.workspace.rootSplit);
+    const activeIndex = activeLeaf ? leaves.indexOf(activeLeaf) : -1;
+    const nextLeaf = leaves[(activeIndex + 1) % leaves.length];
+    if (!nextLeaf) {
+      return false;
+    }
+
+    this.activeMark = null;
+    this.app.workspace.setActiveLeaf(nextLeaf, { focus: true });
+    void this.app.workspace.revealLeaf(nextLeaf);
+    return true;
+  }
+
+  private getVisibleRootLeaves(): WorkspaceLeaf[] {
+    const leaves: WorkspaceLeaf[] = [];
+    this.app.workspace.iterateRootLeaves((leaf) => {
+      if (this.isVisibleLeaf(leaf)) {
+        leaves.push(leaf);
+      }
+    });
+
+    return leaves;
+  }
+
+  private isVisibleLeaf(leaf: WorkspaceLeaf): boolean {
+    const leafEl = leaf.view.containerEl.closest(".workspace-leaf");
+    if (!(leafEl instanceof HTMLElement)) {
+      return false;
+    }
+
+    if (!this.app.workspace.containerEl.contains(leafEl)) {
+      return false;
+    }
+
+    const style = leafEl.ownerDocument.defaultView?.getComputedStyle(leafEl);
+    if (style?.display === "none" || style?.visibility === "hidden") {
+      return false;
+    }
+
+    const rect = leafEl.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
   }
 
   private isComposing(context: EditorContext): boolean {
