@@ -16,6 +16,11 @@ type EditorContext = {
   editor?: Editor;
 };
 
+interface VisibleRootLeaf {
+  leaf: WorkspaceLeaf;
+  rect: DOMRect;
+}
+
 export default class EmacsLikeKillAndYankPlugin extends Plugin {
   private activeMark: ActiveMark | null = null;
 
@@ -53,7 +58,17 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
               return false;
             }
 
-            return this.focusNextVisibleRootLeaf();
+            return this.focusVisibleRootLeaf(1);
+          },
+        },
+        {
+          key: "Ctrl-Shift-t",
+          run: (view) => {
+            if (view.composing) {
+              return false;
+            }
+
+            return this.focusVisibleRootLeaf(-1);
           },
         },
         {
@@ -245,12 +260,29 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
       name: "Focus next split",
       hotkeys: [{ modifiers: ["Ctrl"], key: "t" }],
       checkCallback: (checking) => {
-        if (this.getVisibleRootLeaves().length <= 1) {
+        if (this.getOrderedVisibleRootLeaves().length <= 1) {
           return false;
         }
 
         if (!checking) {
-          this.focusNextVisibleRootLeaf();
+          this.focusVisibleRootLeaf(1);
+        }
+
+        return true;
+      },
+    });
+
+    this.addCommand({
+      id: "focus-previous-split",
+      name: "Focus previous split",
+      hotkeys: [{ modifiers: ["Ctrl", "Shift"], key: "t" }],
+      checkCallback: (checking) => {
+        if (this.getOrderedVisibleRootLeaves().length <= 1) {
+          return false;
+        }
+
+        if (!checking) {
+          this.focusVisibleRootLeaf(-1);
         }
 
         return true;
@@ -529,15 +561,16 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
     new Notice(`Clipboard ${action} failed: ${message}`);
   }
 
-  private focusNextVisibleRootLeaf(): boolean {
-    const leaves = this.getVisibleRootLeaves();
+  private focusVisibleRootLeaf(direction: 1 | -1): boolean {
+    const leaves = this.getOrderedVisibleRootLeaves();
     if (leaves.length <= 1) {
       return false;
     }
 
     const activeLeaf = this.app.workspace.getMostRecentLeaf(this.app.workspace.rootSplit);
     const activeIndex = activeLeaf ? leaves.indexOf(activeLeaf) : -1;
-    const nextLeaf = leaves[(activeIndex + 1) % leaves.length];
+    const nextIndex = (activeIndex + direction + leaves.length) % leaves.length;
+    const nextLeaf = leaves[nextIndex];
     if (!nextLeaf) {
       return false;
     }
@@ -548,34 +581,48 @@ export default class EmacsLikeKillAndYankPlugin extends Plugin {
     return true;
   }
 
-  private getVisibleRootLeaves(): WorkspaceLeaf[] {
-    const leaves: WorkspaceLeaf[] = [];
+  private getOrderedVisibleRootLeaves(): WorkspaceLeaf[] {
+    const visibleLeaves: VisibleRootLeaf[] = [];
     this.app.workspace.iterateRootLeaves((leaf) => {
-      if (this.isVisibleLeaf(leaf)) {
-        leaves.push(leaf);
+      const rect = this.getVisibleLeafRect(leaf);
+      if (rect) {
+        visibleLeaves.push({ leaf, rect });
       }
     });
 
-    return leaves;
+    return visibleLeaves
+      .sort((a, b) => {
+        const leftDiff = a.rect.left - b.rect.left;
+        if (Math.abs(leftDiff) > 1) {
+          return leftDiff;
+        }
+
+        return a.rect.top - b.rect.top;
+      })
+      .map(({ leaf }) => leaf);
   }
 
-  private isVisibleLeaf(leaf: WorkspaceLeaf): boolean {
+  private getVisibleLeafRect(leaf: WorkspaceLeaf): DOMRect | null {
     const leafEl = leaf.view.containerEl.closest(".workspace-leaf");
     if (!(leafEl instanceof HTMLElement)) {
-      return false;
+      return null;
     }
 
     if (!this.app.workspace.containerEl.contains(leafEl)) {
-      return false;
+      return null;
     }
 
     const style = leafEl.ownerDocument.defaultView?.getComputedStyle(leafEl);
     if (style?.display === "none" || style?.visibility === "hidden") {
-      return false;
+      return null;
     }
 
     const rect = leafEl.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0;
+    if (rect.width <= 0 || rect.height <= 0) {
+      return null;
+    }
+
+    return rect;
   }
 
   private isComposing(context: EditorContext): boolean {

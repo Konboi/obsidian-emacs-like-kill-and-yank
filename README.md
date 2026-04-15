@@ -6,6 +6,7 @@ Obsidian plugin that supports:
 - `Ctrl + W`: kill selected region
 - `Ctrl + Y`: yank from the clipboard
 - `Ctrl + T`: focus the next visible split pane
+- `Ctrl + Shift + T`: focus the previous visible split pane
 - `Alt + W`: copy selected region without deleting it
 - `Ctrl + Space`: set mark and keep the editor's native selection in sync while the cursor moves
 - `Ctrl + G` / `Esc`: cancel mark
